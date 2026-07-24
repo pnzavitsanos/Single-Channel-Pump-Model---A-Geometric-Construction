@@ -3,3 +3,4 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 *.log
+testfile_delete_me.txt

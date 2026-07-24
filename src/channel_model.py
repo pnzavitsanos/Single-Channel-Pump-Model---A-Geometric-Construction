@@ -32,6 +32,15 @@ Inlet / outlet angle
 ("outlet"). These two angles are exposed as the primary design parameters of
 the channel: changing them changes how far around the spiral the channel
 opening starts and ends, without altering the underlying spiral or twist law.
+
+Generalized control function
+-----------------------------
+``beta(theta) = pi/4 - theta/8`` above is the *fixed* law from the notebook.
+``control_function_surface()`` / ``control_function_values()`` further down
+generalize it to ``beta(theta; theta_max, beta_max) = beta_max * theta / theta_max``,
+so the total twist across the channel (``beta_max``) is an explicit, tunable
+parameter -- see the "Generalized control function" section of README.md for
+why the ``1/cos(beta)`` width correction is dropped in that generalized path.
 """
 
 from __future__ import annotations
@@ -91,6 +100,49 @@ _X_num = sp.lambdify((theta, w, a, b), X_expr, modules="numpy")
 _Xthick_num = sp.lambdify((theta, w, t, a, b), Xthick_expr, modules="numpy")
 _SurfaceNormal_num = sp.lambdify((theta, w, a, b), SurfaceNormal_expr, modules="numpy")
 
+# ---------------------------------------------------------------------------
+# 3b. Generalized / modifiable control function
+# ---------------------------------------------------------------------------
+#
+# In the notebook, beta(theta) = pi/4 - theta/8 is a *fixed* law: for a given
+# theta domain it happens to produce a twist that decreases from 45 deg
+# (at theta=0) to about 2 deg (at theta=1.9*pi). The rate (-1/8) and the
+# offset (pi/4) are hard-coded together, so there is no direct way to say
+# "I want the twist to sweep from 0 to 180 deg over my chosen theta range."
+#
+# Below, beta is generalized to a single linear control function with two
+# explicit, independent parameters:
+#
+#     beta(theta; theta_max, beta_max) = beta_max * theta / theta_max
+#
+# so beta(0) = 0 and beta(theta_max) = beta_max, by construction, for any
+# theta_max and any beta_max (in particular beta_max = pi, i.e. a full
+# 0 -> 180 deg sweep across the channel, matching the classic Mobius strip's
+# own half-twist but applied over a partial spiral sweep instead of a full
+# 2*pi turn).
+#
+# IMPORTANT: the notebook's ribbon offset uses w / cos(beta) so that the
+# channel's visual width stays constant as beta drifts a little around 45 deg.
+# That factor blows up at beta = 90 deg, which is now inside the requested
+# range. The generalized surface below therefore drops the 1/cos(beta)
+# correction and offsets by plain w * F(theta) instead -- F is always a unit
+# vector, so this stays perfectly well-defined for every beta, including
+# exactly 90 deg, at the cost of the channel width no longer being held
+# artificially constant against the twist (it narrows in the surface's XY
+# projection as beta approaches 90 deg, which is the geometrically honest
+# behavior of a rotating offset).
+
+theta_max_sym, beta_max_sym = sp.symbols("theta_max beta_max", real=True, positive=True)
+
+beta_gen_expr = beta_max_sym * theta / theta_max_sym
+F_gen_expr = -sp.sin(beta_gen_expr) * N3_expr + sp.cos(beta_gen_expr) * Z_expr
+X_gen_expr = r3_expr + w * F_gen_expr
+
+_X_gen_num = sp.lambdify((theta, w, a, b, theta_max_sym, beta_max_sym), X_gen_expr,
+                          modules="numpy")
+_beta_gen_num = sp.lambdify((theta, theta_max_sym, beta_max_sym), beta_gen_expr,
+                             modules="numpy")
+
 
 @dataclass(frozen=True)
 class SpiralParams:
@@ -142,6 +194,37 @@ def channel_shell(theta_min_deg: float, theta_max_deg: float,
     return Xt[0], Xt[1], Xt[2]
 
 
+def control_function_surface(theta_max_deg: float, beta_max_deg: float,
+                              params: SpiralParams = DEFAULT_PARAMS,
+                              n_theta: int = 140, n_w: int = 24):
+    """Evaluate the generalized-control-function surface X(theta, w).
+
+    theta always sweeps [0, theta_max_deg] (the "inlet" is fixed at 0 here --
+    this function is for exploring the twist LAW, not the theta domain).
+
+    beta(theta) = beta_max_deg * theta / theta_max_deg, so the twist runs
+    linearly from 0 deg at theta=0 to beta_max_deg at theta=theta_max_deg.
+    """
+    th = np.linspace(0.0, np.deg2rad(theta_max_deg), n_theta)
+    wv = np.linspace(params.w_min, params.w_max, n_w)
+    TH, W = np.meshgrid(th, wv, indexing="ij")
+    X = np.asarray(
+        _X_gen_num(TH, W, params.a, params.b, np.deg2rad(theta_max_deg), np.deg2rad(beta_max_deg)),
+        dtype=float,
+    )
+    X = X.reshape(3, n_theta, n_w)
+    return X[0], X[1], X[2], th, wv
+
+
+def control_function_values(theta_max_deg: float, beta_max_deg: float, n_theta: int = 140):
+    """Return (theta_deg, beta_deg) sample arrays of the control function itself."""
+    th = np.linspace(0.0, np.deg2rad(theta_max_deg), n_theta)
+    beta = np.asarray(
+        _beta_gen_num(th, np.deg2rad(theta_max_deg), np.deg2rad(beta_max_deg)), dtype=float
+    )
+    return np.rad2deg(th), np.rad2deg(beta)
+
+
 if __name__ == "__main__":
     x, y, z, th, wv = channel_surface(BASELINE_INLET_DEG, BASELINE_OUTLET_DEG)
     print("Surface grid:", x.shape)
@@ -149,3 +232,9 @@ if __name__ == "__main__":
     print("x range:", x.min(), x.max())
     print("y range:", y.min(), y.max())
     print("z range:", z.min(), z.max())
+
+    xg, yg, zg, thg, wvg = control_function_surface(BASELINE_OUTLET_DEG, 180.0)
+    print("\nGeneralized control-function surface grid:", xg.shape)
+    print("x range:", xg.min(), xg.max())
+    print("y range:", yg.min(), yg.max())
+    print("z range:", zg.min(), zg.max())
