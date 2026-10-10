@@ -31,7 +31,6 @@ showing the effect of sweeping the twist law itself from no twist to a full 180�
 7. [Repository structure](#7-repository-structure)
 8. [Reproducing the results](#8-reproducing-the-results)
 9. [Limitations and future work](#9-limitations-and-future-work)
-10. [Acknowledgments](#10-acknowledgments)
 
 ## 1. Motivation
 
@@ -45,10 +44,8 @@ rate, twist law, wall thickness, inlet angle, outlet angle) is traceable to an e
 
 ## 2. Development progression
 
-The construction was developed iteratively across five Mathematica notebooks, worked out through a
-sequence of exchanges recorded (and lightly deduplicated) in
-[`docs/derivation_notes.md`](docs/derivation_notes.md). Each notebook is kept in
-[`notebooks/`](notebooks/), numbered in the order below.
+The construction was developed iteratively across five Mathematica notebooks. Each notebook is kept
+in [`notebooks/`](notebooks/), numbered in the order below.
 
 | Step | Notebook | Date | Contribution |
 |---|---|---|---|
@@ -196,8 +193,6 @@ at the top of this document, at the baseline inlet/outlet angles and Step 5's tw
 ├── LICENSE
 ├── requirements.txt
 ├── notebooks/            original Mathematica notebooks, in development order
-├── docs/
-│   └── derivation_notes.md   deduplicated transcript of the symbolic derivation
 ├── src/
 │   └── channel_model.py      SymPy/NumPy re-implementation + generalized control function
 ├── scripts/
@@ -259,14 +254,6 @@ Natural next steps:
   round trip used in Step 5.
 - Reconciling the two `w` conventions (centered `[-0.1, 0.1]` vs. one-sided `[0, 0.3]`) into a single
   parametrization.
-
-## 10. Acknowledgments
-
-The symbolic derivation underlying this geometry was worked out in conversation with ChatGPT; the
-deduplicated transcript is preserved in [`docs/derivation_notes.md`](docs/derivation_notes.md) for
-provenance. All Mathematica code was written and run by the author; the Python reimplementation,
-generalized control function, and animations in this repository were produced with the assistance of
-Claude.
 
 ## License
 
