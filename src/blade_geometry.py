@@ -4,6 +4,23 @@ blade_geometry.py
 
 The blade of a single-channel pump as a ruled surface over a spiral.
 
+Two ingredients
+---------------
+The spiral: a circle whose radius depends on the angle,
+        P(theta) = rho(theta) (cos theta, sin theta, 0),
+    with rho constant for the circle, a e^{b theta} for the logarithmic spiral
+    and a + b theta for the Archimedean one.
+
+The rotating fibre: a straight line standing on every point of the curve,
+    in the plane perpendicular to it, that turns about the tangent as the
+    point moves. On the circle, F = cos(theta/2) R + sin(theta/2) Z turns at
+    half the speed of the point and sweeps out the Moebius strip; after one
+    turn it has rotated by 180 degrees and comes back reversed.
+
+The blade is the same formula, X = P + v F, on a spiral, with a fibre that
+turns slowly (beta = pi/4 - theta/8 in the notebook) and is stretched so that
+it spans exactly the gap between two parallel planes.
+
 Construction
 ------------
 1.  Base curve: any spiral rho(theta) in the plane z = 0, for 0 <= theta <= Phi.
@@ -96,6 +113,19 @@ class CustomSpiral:
 
 
 @dataclass(frozen=True)
+class Circle:
+    """rho = r: the spiral that does not grow. Here N = -R and kappa = 1/r."""
+    r: float = 1.0
+
+    def __call__(self, th):
+        th = np.asarray(th, float)
+        return np.full_like(th, self.r), np.zeros_like(th), np.zeros_like(th)
+
+    def formula(self):
+        return rf"$\rho = {self.r:g}$"
+
+
+@dataclass(frozen=True)
 class Blend:
     """(1 - t) * first + t * second: a continuous path between two spirals."""
     first: object
@@ -158,8 +188,13 @@ def ruling_angle(theta, b: Blade = NOTEBOOK):
 
 def frame(theta, b: Blade = NOTEBOOK):
     """Point P, tangent T, normal N (shape (3, ...)), speed s and turning rate alpha'."""
+    return base_frame(theta, b.spiral)
+
+
+def base_frame(theta, spiral):
+    """frame() for any base curve rho(theta), circle included."""
     theta = np.asarray(theta, float)
-    r, r1, r2 = b.spiral(theta)
+    r, r1, r2 = spiral(theta)
     c, sn = np.cos(theta), np.sin(theta)
     zero = np.zeros_like(theta)
     P = np.stack([r * c, r * sn, zero])
@@ -187,6 +222,29 @@ def _Z(like):
     Z = np.zeros_like(like)
     Z[2] = 1.0
     return Z
+
+
+def fibre(theta, beta, spiral):
+    """The rotating fibre F = -sin(beta) N + cos(beta) Z = R_T(beta) Z: the vertical
+    direction turned about the tangent by beta. In the notebook's Moebius form,
+    F = cos(phi) R + sin(phi) Z with R = -N and phi = pi/2 - beta."""
+    theta, beta = np.broadcast_arrays(np.asarray(theta, float), np.asarray(beta, float))
+    P, _, N, _, _ = base_frame(theta, spiral)
+    return -np.sin(beta) * N + np.cos(beta) * _Z(P)
+
+
+def fibre_surface(theta, v, beta, spiral):
+    """The general formula X = P + v F: a curve carrying a rotating fibre."""
+    theta, v, beta = np.broadcast_arrays(*(np.asarray(a, float) for a in (theta, v, beta)))
+    P = base_frame(theta, spiral)[0]
+    return P + v * fibre(theta, beta, spiral)
+
+
+def mobius_strip(theta, v, r: float = 1.0):
+    """Circle + fibre turning at half speed, F = cos(theta/2) R + sin(theta/2) Z,
+    i.e. beta = pi/2 - theta/2."""
+    theta = np.asarray(theta, float)
+    return fibre_surface(theta, v, np.pi / 2 - theta / 2, Circle(r))
 
 
 def surface(theta, w, b: Blade = NOTEBOOK):
@@ -414,6 +472,13 @@ def symbolic_check():
                 err = np.maximum(err, [abs(K0 - gaussian_curvature(t0, w0, b)),
                                        abs(k0 - curvature(t0, b)), abs(z0 - v0)])
         print(f"  {name:12s} max error  K {err[0]:.1e}   curvature {err[1]:.1e}   height {err[2]:.1e}")
+
+    # The Moebius strip of notebook 2 is the same formula on a circle with beta = pi/2 - theta/2.
+    t = np.linspace(0, 4 * np.pi, 50)
+    R = np.stack([np.cos(t), np.sin(t), np.zeros_like(t)])
+    F_nb = np.cos(t / 2) * R + np.sin(t / 2) * _Z(R)
+    F = fibre(t, np.pi / 2 - t / 2, Circle(1.0))
+    print(f"  {'Moebius':12s} max error  F vs cos(theta/2) R + sin(theta/2) Z: {np.abs(F - F_nb).max():.1e}")
 
 
 if __name__ == "__main__":
