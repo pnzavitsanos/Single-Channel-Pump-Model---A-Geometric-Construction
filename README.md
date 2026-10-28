@@ -22,6 +22,18 @@ Because the construction is explicit, its geometry can be worked out in closed f
 
 Everything is implemented in [`src/channel_model.py`](src/channel_model.py) and checked against an independent symbolic derivation.
 
+## Where the idea came from
+
+The starting point was a drawing from Frederic Schuller's lecture course *Geometric Anatomy of Theoretical Physics*, in the part on connections and parallel transport. It shows a curve in a base manifold, a fibre standing over each point of the curve, and the curve lifted up through those fibres to a new height, where the lifted points are joined into a new curve (the horizontal lift).
+
+This project asks what that picture looks like when everything is concrete and Euclidean:
+
+- the base is the plane $z = 0$, and the curve is a logarithmic spiral;
+- the fibre over each point is a real straight segment, a ruling of the blade;
+- the lifted curve is the top edge of the blade, at height $z = H$.
+
+In a bundle, a connection decides how a point is carried from fibre to fibre along the curve. Here that choice is made by hand: each ruling is turned about the spiral's tangent by a lean angle $\beta(\theta)$, the way the fibre of a Möbius strip turns as it goes around the circle. The two-plane property of [§3](#3-the-two-plane-property) is what makes "lifted to a new height and joined there" exact.
+
 ## Table of contents
 
 1. [The idea in one animation](#1-the-idea-in-one-animation)
@@ -63,6 +75,8 @@ N(\theta) &= \bigl(-\sin(\theta+\varphi),\ \cos(\theta+\varphi),\ 0\bigr),\\
 
 So the tangent turns at exactly unit rate in $\theta$, and the radius of curvature $1/\kappa$ equals the speed $s(\theta)$. With $b = 0.2$ the blade angle, measured from the circumferential direction, is $\arctan b \approx 11.3^\circ$ along the whole blade. $(T, N, Z)$ is a right-handed orthonormal frame, with $T \times N = Z$ and $N \times Z = T$.
 
+The normal is computed as the derivative of the unit tangent, $N = T'/|T'|$, not as $r''$. The second derivative depends on how fast the curve is parametrised, while $T'$ only records turning. Because $T \cdot T = 1$, differentiating gives $T \cdot T' = 0$, so $T'$ is automatically perpendicular to the curve.
+
 ### 2.2 Rulings: rotation about the tangent
 
 At each point of the spiral a unit direction is chosen in the normal plane $\mathrm{span}\lbrace N, Z\rbrace$:
@@ -84,6 +98,8 @@ It is exactly the Möbius-strip mechanism. For the Möbius strip the base curve 
 ```
 
 so the blade leans outward by $45^\circ$ at the inlet and straightens to about $2.25^\circ$ at the outlet.
+
+**The rulings only turn.** Since $F \cdot F = 1$, differentiating gives $F \cdot F' = 0$. As the foot of a ruling moves along the spiral, its direction rotates but never stretches, by the same argument that shows the Frenet vectors only rotate. The only change of length in the whole construction is the deliberate factor $1/\cos\beta$ of §2.3.
 
 ### 2.3 The blade surface
 
@@ -210,6 +226,10 @@ The construction was developed in Mathematica; the notebooks are kept in [`noteb
 | 3 | [`03_log_spiral_v1.nb`](notebooks/03_log_spiral_v1.nb) | 2025-11-24 | Logarithmic spiral and its Frenet frame derived symbolically. First spiral ribbon, with the fibre $N + Z$ rotated about the vertical axis. |
 | 4 | [`04_modified_mobius_curvature.nb`](notebooks/04_modified_mobius_curvature.nb) | 2025-12-01 | Side study: a warping term $\alpha v^2 \sin u$ added to the Möbius strip to give it intrinsic curvature. |
 | 5 | [`05_log_spiral_v2_final.nb`](notebooks/05_log_spiral_v2_final.nb) | 2026-01-08 | Final construction: the fibre rotated inside the normal plane (about $T$), lean law $\pi/4 - \theta/8$, the $1/\cos\beta$ stretch so rulings span $0 \le z \le 0.3$, wall thickness $h = 0.05$, and point-cloud export for Inventor. |
+
+The decisive change between steps 3 and 5 was the axis of rotation. Turning the fibre about the vertical axis moves it out of the normal plane of the spiral. Turning it about the tangent keeps it in the normal plane, which is what the Möbius strip does and what makes the two-plane property possible.
+
+In the notebooks the normal is called `NormalVec`, because `N` is a protected built-in function in Mathematica, and planar vectors are lifted to 3D with `Append[..., 0]` before they are combined with $Z$.
 
 The Python code in this repository adds the closed forms, the curvature and developability analysis, the general lean law, and the horizontal wall offset.
 
