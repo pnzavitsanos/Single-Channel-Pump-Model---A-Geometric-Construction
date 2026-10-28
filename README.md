@@ -1,6 +1,6 @@
 # Single-Channel Pump Blade: a Ruled Surface Between Two Parallel Planes
 
-**Author:** Panagiotis Zavitsanos
+**Author:** Panagiotis Zavitsanos  
 **Status:** geometry complete and verified; no fluid-dynamic analysis yet (see [Limitations](#9-limitations-and-future-work))
 
 <p align="center">
