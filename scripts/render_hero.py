@@ -2,8 +2,8 @@
 render_hero.py
 ===============
 
-Banner image: the blade with wall thickness, standing between the two
-parallel planes z = 0 and z = H.
+media/hero_impeller.png: (a) the single-blade impeller (hub, blade, and a
+cut-away shroud) and (b) the blade alone with its straight rulings.
 
 Usage:
     python scripts/render_hero.py
@@ -15,35 +15,38 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from plot_utils import MEDIA, INK, draw_planes, setup_3d, trim_png
-from channel_model import (DEFAULT_PARAMS as P, BASELINE_INLET_DEG, BASELINE_OUTLET_DEG,
-                           channel_shell, frame)
+from plot_utils import (MEDIA, INK, BLADE, draw_meshes, draw_impeller,
+                        draw_planes, setup_3d, trim_png)
+from impeller_geometry import NOTEBOOK, impeller_meshes, surface, grid
 
-OUT = os.path.join(MEDIA, "hero_channel.png")
-RADIUS = 0.78
+OUT = os.path.join(MEDIA, "hero_impeller.png")
 
 
-def main():
-    fig = plt.figure(figsize=(8, 6))
-    ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
+def main(d=NOTEBOOK):
+    parts = impeller_meshes(d)
+    R = np.linalg.norm(parts["hub"][..., :2], axis=-1).max()
+
+    fig = plt.figure(figsize=(13, 5.6))
     fig.patch.set_facecolor("white")
 
-    draw_planes(ax, RADIUS, P.height)
-    for sign, color in ((-1.0, "#256abf"), (+1.0, "#6da7ec")):
-        x, y, z = channel_shell(BASELINE_INLET_DEG, BASELINE_OUTLET_DEG, sign,
-                                n_theta=260, n_w=20, offset="horizontal")
-        ax.plot_surface(x, y, z, color=color, alpha=0.95, linewidth=0, antialiased=True, shade=True)
+    ax = fig.add_subplot(1, 2, 1, projection="3d", computed_zorder=False)
+    draw_impeller(ax, d)
+    setup_3d(ax, R, d.height + 0.05, elev=32, azim=-60, zoom=1.25)
+    ax.set_zlim(-0.03, d.height + 0.05)
+    ax.set_title("(a) Impeller: hub, blade, and shroud (front half cut away)", color=INK, fontsize=13)
 
-    th = np.linspace(np.deg2rad(BASELINE_INLET_DEG), np.deg2rad(BASELINE_OUTLET_DEG), 300)
-    r = frame(th)[0]
-    ax.plot(r[0], r[1], r[2], color=INK, linewidth=1.2)
+    ax = fig.add_subplot(1, 2, 2, projection="3d", computed_zorder=False)
+    draw_planes(ax, R, d.height)
+    draw_meshes(ax, [(parts["blade"], BLADE, 1.0)])
+    th, wv, TH, W = grid(d, 25, 2)
+    X = surface(TH, W, d)
+    for i in range(len(th)):
+        ax.plot(X[0, i], X[1, i], X[2, i], color=INK, linewidth=0.7)
+    setup_3d(ax, R, d.height, elev=32, azim=-60, zoom=1.25)
+    ax.set_title("(b) Blade: straight rulings from hub plane to shroud plane", color=INK, fontsize=13)
 
-    setup_3d(ax, RADIUS, P.height, elev=30, azim=-62, zoom=1.18)
-    ax.set_title("Log-spiral blade between two parallel planes\n"
-                 r"$X(\theta,w)=r(\theta)+\frac{w}{\cos\beta(\theta)}\,F(\theta)$,"
-                 r"   $0\leq w\leq H$", fontsize=12, color=INK)
-    fig.subplots_adjust(left=0, right=1, bottom=0, top=0.88)
-    fig.savefig(OUT, dpi=150, facecolor="white")
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=0.92, wspace=0.02)
+    fig.savefig(OUT, dpi=140, facecolor="white")
     trim_png(OUT)
     print("wrote", OUT)
 
