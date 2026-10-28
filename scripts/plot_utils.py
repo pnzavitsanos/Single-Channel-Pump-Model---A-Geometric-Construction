@@ -1,4 +1,4 @@
-"""Shared styling for the figures and animations."""
+"""Shared styling and drawing helpers for the figures and animations."""
 import os
 import sys
 
@@ -12,6 +12,10 @@ MEDIA = os.path.join(os.path.dirname(__file__), "..", "media")
 INK = "#1f2328"
 MUTED = "#6e7781"
 PLANE = "#8c959f"
+PLATE_BOTTOM = "#8c959f"
+PLATE_TOP = "#c9d1d9"
+BLADE = "#3987e5"
+ACCENT = "#c2410c"
 
 # One-hue blue ramp: light = flat (K = 0), dark = strongly curved.
 BLUES = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
@@ -30,7 +34,7 @@ def draw_planes(ax, radius, height, n=96):
                 color=PLANE, linewidth=0.8)
 
 
-def setup_3d(ax, radius, height, elev=24, azim=-62, zoom=1.0):
+def setup_3d(ax, radius, height, elev=30, azim=-90, zoom=1.0):
     ax.set_xlim(-radius, radius)
     ax.set_ylim(-radius, radius)
     ax.set_zlim(0, height)
@@ -39,8 +43,8 @@ def setup_3d(ax, radius, height, elev=24, azim=-62, zoom=1.0):
     ax.view_init(elev=elev, azim=azim)
 
 
-def save_gif(frame_paths, out, fps, hold_last=0, hold_first=0):
-    """Write an animated GIF with one shared palette (consistent colours on every frame)."""
+def save_gif(frame_paths, out, fps, hold_last=0, hold_first=0, holds=None):
+    """Animated GIF with one shared palette. holds: {frame index: extra frames to hold}."""
     from PIL import Image
     frames = [Image.open(p).convert("RGB") for p in frame_paths]
     sample = Image.new("RGB", (frames[0].width, frames[0].height * 4))
@@ -48,11 +52,27 @@ def save_gif(frame_paths, out, fps, hold_last=0, hold_first=0):
         sample.paste(frames[idx], (0, frames[0].height * k))
     palette = sample.quantize(colors=128, method=Image.Quantize.MEDIANCUT)
     images = [f.quantize(palette=palette, dither=Image.Dither.NONE) for f in frames]
-    durations = [int(1000 / fps)] * len(images)
-    durations[0] += hold_first * int(1000 / fps)
-    durations[-1] += hold_last * int(1000 / fps)
+    step = int(1000 / fps)
+    durations = [step] * len(images)
+    durations[0] += hold_first * step
+    durations[-1] += hold_last * step
+    for i, extra in (holds or {}).items():
+        durations[i] += extra * step
     images[0].save(out, save_all=True, append_images=images[1:], duration=durations,
                    loop=0, optimize=False, disposal=1)
+
+
+def save_mp4(frame_paths, out, fps):
+    """Same frames as an MP4 (needs ffmpeg on the PATH)."""
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        return
+    folder = os.path.dirname(frame_paths[0])
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps),
+                    "-i", os.path.join(folder, "f%03d.png"), "-pix_fmt", "yuv420p",
+                    "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-crf", "18",
+                    "-movflags", "+faststart", out], check=True)
 
 
 def trim_png(path, pad=12):
@@ -67,14 +87,8 @@ def trim_png(path, pad=12):
 
 
 # ---------------------------------------------------------------------------
-# Shaded triangle meshes in one depth-sorted collection
+# Shaded triangle meshes
 # ---------------------------------------------------------------------------
-
-HUB = "#8c959f"
-BLADE = "#3987e5"
-SHROUD = "#c9d1d9"
-ACCENT = "#c2410c"
-
 
 def shaded(tris, color, alpha=1.0, light=(-0.4, -0.6, 0.8), ambient=0.45):
     """Per-triangle Lambert shading (two-sided)."""
@@ -100,26 +114,17 @@ def draw_meshes(ax, parts, zorder=1):
     return pc
 
 
-def draw_impeller(ax, d, shroud_sector=(np.deg2rad(20), np.deg2rad(200)), blade_color=None,
-                  hub_thickness=0.03, shroud_thickness=0.02):
-    """Hub, blade and a sector of the shroud, layered bottom to top. Seen from
-    above, the hub is always behind the blade and the blade behind the shroud,
-    so drawing them in that order avoids depth-sorting errors."""
-    from impeller_geometry import blade_mesh, disc_mesh
-    blade = blade_mesh(d, n_theta=140, n_w=12)
+def draw_pump(ax, b, top_sector=(np.deg2rad(20), np.deg2rad(200)), plate=0.03, n_theta=140):
+    """Bottom plate, blade and a sector of the top plate, layered bottom to top.
+    Seen from above, each layer is behind the next, so this order avoids
+    depth-sorting errors between parts."""
+    from blade_geometry import blade_mesh, disc_mesh
+    blade = blade_mesh(b, n_theta=n_theta, n_w=12)
     R = np.linalg.norm(blade[..., :2], axis=-1).max() + 0.02
-    hub = disc_mesh(0.04, R, -hub_thickness, 0.0)
-    layers = [[(hub, HUB, 1.0)], [(blade, blade_color or BLADE, 1.0)]]
-    if shroud_sector is not None:
-        shroud = disc_mesh(d.r1, R, d.height, d.height + shroud_thickness, sector=shroud_sector)
-        layers.append([(shroud, SHROUD, 1.0)])
+    layers = [[(disc_mesh(0.04, R, -plate, 0.0), PLATE_BOTTOM, 1.0)], [(blade, BLADE, 1.0)]]
+    if top_sector is not None:
+        eye = float(b.spiral(0.0)[0])
+        layers.append([(disc_mesh(eye, R, b.height, b.height + plate, sector=top_sector), PLATE_TOP, 1.0)])
     for z, layer in enumerate(layers):
         draw_meshes(ax, layer, zorder=z + 1)
     return R
-
-
-def cutaway(tris, angle_from, angle_to):
-    """Keep only the triangles whose centroid lies in the given polar-angle range."""
-    c = tris.mean(axis=1)
-    a = np.mod(np.arctan2(c[:, 1], c[:, 0]) - angle_from, 2 * np.pi)
-    return tris[a <= np.mod(angle_to - angle_from, 2 * np.pi)]
