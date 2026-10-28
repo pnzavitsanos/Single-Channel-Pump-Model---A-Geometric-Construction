@@ -1,260 +1,262 @@
-# Single-Channel Pump Skeleton: A Log-Spiral, Twisted-Ribbon Construction
+# Single-Channel Pump Blade: a Ruled Surface Between Two Parallel Planes
 
 **Author:** Panagiotis Zavitsanos
-**Status:** geometric skeleton complete; fluid-dynamic characterization not yet performed (see [Limitations](#9-limitations-and-future-work))
+**Status:** geometry complete and verified; no fluid-dynamic analysis yet (see [Limitations](#9-limitations-and-future-work))
 
 <p align="center">
-  <img src="media/hero_channel.png" alt="Single-channel pump skeleton, baseline inlet/outlet angles" width="640">
+  <img src="media/hero_channel.png" alt="Log-spiral blade with wall thickness between two parallel planes" width="640">
 </p>
 
 ## Abstract
 
-This repository documents the derivation and computational implementation of a parametric surface
-intended as the geometric skeleton of a single-channel pump: a spiral channel of finite wall
-thickness, swept along a logarithmic-spiral base curve with a controllable cross-sectional twist.
-The construction generalizes the classical Möbius strip's rotating-fiber idea — normally a uniform
-half-twist applied around a circle — to a twist applied around a logarithmic spiral, producing an
-open (non-closed) ribbon whose start angle ("inlet"), end angle ("outlet"), and twist law are all
-free design parameters. The derivation proceeded through five iterations, worked out symbolically and
-implemented in Mathematica, and is reproduced here in Python together with two animations: one
-showing the surface's sensitivity to small perturbations of the inlet and outlet angles, and one
-showing the effect of sweeping the twist law itself from no twist to a full 180° half-twist.
+The blade of a single-channel pump has to wind around the axis and sit between two parallel discs (the hub and the shroud). This project builds such a blade from differential geometry rather than from a CAD primitive.
+
+The surface is **ruled**: it is a one-parameter family of straight segments (a foliation of the surface by lines) attached along a logarithmic spiral. Each segment lies in the normal plane of the spiral and is turned about the spiral's tangent by a lean angle $\beta(\theta)$. This is the same rotating-fibre mechanism as the Möbius strip, transported from a circle to a spiral. Each segment is then stretched by $1/\cos\beta$, which makes every one of them start on the plane $z=0$ and end exactly on the plane $z=H$, whatever its lean. The blade therefore fits between two parallel planes by construction.
+
+Because the construction is explicit, its geometry can be worked out in closed form:
+
+- the spiral's Frenet frame is explicit, with $\kappa s = 1$;
+- the height of every point equals its parameter, $z = w$;
+- each horizontal slice of the blade is an offset curve of the spiral;
+- the Gaussian curvature has a closed form, and the blade is developable (it can be rolled from flat sheet) **if and only if the lean angle is constant**.
+
+Everything is implemented in [`src/channel_model.py`](src/channel_model.py) and checked against an independent symbolic derivation.
 
 ## Table of contents
 
-1. [Motivation](#1-motivation)
-2. [Development progression](#2-development-progression)
-3. [Mathematical formulation](#3-mathematical-formulation)
-4. [Generalized control function](#4-generalized-control-function)
-5. [Inlet/outlet angle parametrization](#5-inletoutlet-angle-parametrization)
-6. [Animations](#6-animations)
-7. [Repository structure](#7-repository-structure)
-8. [Reproducing the results](#8-reproducing-the-results)
+1. [The idea in one animation](#1-the-idea-in-one-animation)
+2. [Construction](#2-construction)
+3. [The two-plane property](#3-the-two-plane-property)
+4. [Two foliations: rulings and horizontal slices](#4-two-foliations-rulings-and-horizontal-slices)
+5. [Curvature and developability](#5-curvature-and-developability)
+6. [Wall thickness](#6-wall-thickness)
+7. [The lean law as a design control](#7-the-lean-law-as-a-design-control)
+8. [Development history and reproduction](#8-development-history-and-reproduction)
 9. [Limitations and future work](#9-limitations-and-future-work)
 
-## 1. Motivation
+## 1. The idea in one animation
 
-A single-channel pump moves fluid through one continuous spiral passage rather than through several
-blade-separated channels, as in a conventional multi-vane impeller. Before any fluid-dynamic design
-can begin, that passage needs a well-defined geometric skeleton: a surface that sweeps from an inlet
-opening to an outlet opening along a continuously curving path, with a controllable cross-section,
-wall thickness, and twist. This project develops that skeleton from first principles in differential
-geometry, rather than starting from a CAD primitive, so that every design parameter (spiral growth
-rate, twist law, wall thickness, inlet angle, outlet angle) is traceable to an explicit formula.
+A single straight segment travels along the spiral. At every point it stands in the plane spanned by the normal $N$ and the vertical $Z$, leans away from the vertical by $\beta(\theta)$, and always reaches from the bottom plane to the top plane. The surface it sweeps out is the blade.
 
-## 2. Development progression
+<p align="center">
+  <img src="media/ruling_sweep.gif" alt="A ruling swept along the logarithmic spiral" width="520">
+</p>
 
-The construction was developed iteratively across five Mathematica notebooks. Each notebook is kept
-in [`notebooks/`](notebooks/), numbered in the order below.
+## 2. Construction
+
+### 2.1 Base curve: the logarithmic spiral
+
+```math
+r(\theta) = a\,e^{b\theta}\,(\cos\theta,\ \sin\theta,\ 0), \qquad a = 0.2,\quad b = 0.2 .
+```
+
+The logarithmic spiral is the curve whose tangent makes a constant angle with the radius vector, which is why it is the classical shape of a pump blade with constant blade angle. Writing $\cot\varphi = b$, the Frenet data come out in closed form:
+
+```math
+\begin{aligned}
+s(\theta) &= |r'(\theta)| = a\sqrt{1+b^2}\,e^{b\theta},\\
+T(\theta) &= \bigl(\cos(\theta+\varphi),\ \sin(\theta+\varphi),\ 0\bigr),\\
+N(\theta) &= \bigl(-\sin(\theta+\varphi),\ \cos(\theta+\varphi),\ 0\bigr),\\
+\kappa(\theta)\,s(\theta) &= 1 .
+\end{aligned}
+```
+
+So the tangent turns at exactly unit rate in $\theta$, and the radius of curvature $1/\kappa$ equals the speed $s(\theta)$. With $b = 0.2$ the blade angle, measured from the circumferential direction, is $\arctan b \approx 11.3^\circ$ along the whole blade. $(T, N, Z)$ is a right-handed orthonormal frame, with $T \times N = Z$ and $N \times Z = T$.
+
+### 2.2 Rulings: rotation about the tangent
+
+At each point of the spiral a unit direction is chosen in the normal plane $\mathrm{span}\lbrace N, Z\rbrace$:
+
+```math
+F(\theta) = -\sin\beta(\theta)\,N(\theta) + \cos\beta(\theta)\,Z .
+```
+
+This is the vertical $Z$ rotated about the tangent $T$ by the angle $\beta$:
+
+```math
+R_T(\beta)\,Z = \cos\beta\,Z + \sin\beta\,(T \times Z) = \cos\beta\,Z - \sin\beta\,N = F .
+```
+
+It is exactly the Möbius-strip mechanism. For the Möbius strip the base curve is a circle and the fibre $F = \cos(\theta/2)\,R + \sin(\theta/2)\,Z$ turns about the tangent at rate $1/2$, half a turn in one loop. Here the base curve is a spiral and the lean follows the law of the final notebook:
+
+```math
+\beta(\theta) = \frac{\pi}{4} - \frac{\theta}{8}, \qquad \theta \in [0,\ 1.9\pi],
+```
+
+so the blade leans outward by $45^\circ$ at the inlet and straightens to about $2.25^\circ$ at the outlet.
+
+### 2.3 The blade surface
+
+```math
+X(\theta, w) = r(\theta) + \frac{w}{\cos\beta(\theta)}\,F(\theta), \qquad 0 \le w \le H = 0.3 .
+```
+
+Substituting $F$ gives the explicit form used in the code:
+
+```math
+X(\theta, w) = r(\theta) - w\,\tan\beta(\theta)\,N(\theta) + w\,Z .
+```
+
+## 3. The two-plane property
+
+> **Proposition.** For every $\theta$ and $w$, the height of $X(\theta, w)$ is exactly $w$. Each ruling ($\theta$ fixed) is a straight segment of length $H/\cos\beta$ that starts on the plane $z=0$ and ends on the plane $z=H$.
+
+*Proof.* $r$ and $N$ are horizontal, so the only vertical contribution is $\frac{w}{\cos\beta}\cos\beta = w$. $\square$
+
+This is what the factor $1/\cos\beta$ is for. Without it, a ruling of fixed length $\ell$ would reach only the height $\ell\cos\beta$, so the top edge of the blade would sag wherever it leans more and could not meet a flat shroud. With it, the blade fits between two parallel planes for any lean law.
+
+The same formula sets the limit of the construction. A ruling can reach $z=H$ only while $\cos\beta > 0$, so every lean law must satisfy
+
+```math
+-90^\circ < \beta(\theta) < 90^\circ .
+```
+
+## 4. Two foliations: rulings and horizontal slices
+
+The blade is covered by two transverse families of curves:
+
+- **Rulings** ($\theta$ fixed) are straight segments from plane to plane.
+- **Horizontal slices** ($w = c$ fixed) are the intersections of the blade with the planes $z = c$:
+
+```math
+X(\theta, c) = r(\theta) - c\,\tan\beta(\theta)\,N(\theta) + c\,Z .
+```
+
+Every slice is therefore a **variable-offset curve** of the base spiral: it is the spiral pushed sideways by the distance $c\tan\beta(\theta)$. If the lean is constant the slices are ordinary parallel curves of the spiral.
+
+<p align="center">
+  <img src="media/geometry.png" alt="Rulings, horizontal slices and Gaussian curvature of the blade" width="100%">
+</p>
+
+**Regularity.** The tangent vectors are
+
+```math
+\begin{aligned}
+X_\theta &= \bigl(s + w\tan\beta\bigr)\,T \;-\; \frac{w\,\beta'}{\cos^2\beta}\,N,\\
+X_w &= -\tan\beta\,N + Z .
+\end{aligned}
+```
+
+$N$ points toward the centre of curvature. When the blade leans outward ($\beta > 0$, as in the notebook), the slices move away from the centre of curvature and stay smooth. When it leans inward, the offset distance must stay below the radius of curvature $s(\theta)$:
+
+```math
+s(\theta) + w\tan\beta(\theta) > 0 .
+```
+
+Otherwise the slices pass the evolute of the spiral (itself a logarithmic spiral) and fold back on themselves.
+
+## 5. Curvature and developability
+
+The unnormalised normal is
+
+```math
+X_\theta \times X_w = -\frac{w\,\beta'}{\cos^2\beta}\,T \;-\; \bigl(s + w\tan\beta\bigr)\,N \;-\; \bigl(s + w\tan\beta\bigr)\tan\beta\,Z .
+```
+
+For a ruled surface $X = r + vF$, the Gaussian curvature is $K = -\det(r', F, F')^2 / |X_\theta \times X_v|^4$. Here
+
+```math
+\det\bigl(r',\, F,\, F'\bigr) = s\,\beta', \qquad |F'|^2 = \sin^2\beta + \beta'^2 ,
+```
+
+and changing back to the height coordinate $w = v\cos\beta$ gives the closed form
+
+```math
+\boxed{\,K(\theta, w) = -\,\frac{\bigl(s\,\beta'\bigr)^2}{\Bigl[\bigl(s + w\tan\beta\bigr)^2 + \bigl(w\,\beta'/\cos\beta\bigr)^2\Bigr]^2}\,}
+```
+
+Three consequences follow.
+
+1. **$K \le 0$ everywhere.** The blade is saddle-shaped wherever it is curved at all.
+2. **Developability.** $K \equiv 0$ if and only if $\beta' \equiv 0$. A constant lean gives a surface of constant slope over the spiral, which can be rolled from flat sheet metal. Any change of lean along the blade makes it doubly curved, so it has to be pressed or machined.
+3. **Along the bottom edge** ($w = 0$) the curvature is minus the square of the twist rate per unit length, where $\sigma$ is arc length:
+
+```math
+K\big|_{w=0} = -\frac{\beta'^2}{s^2} = -\left(\frac{d\beta}{d\sigma}\right)^2 .
+```
+
+For the notebook's law ($\beta' = -1/8$), $K$ ranges from $-0.376$ at the inlet foot to $-0.0099$ at the top of the outlet. The formula agrees with a symbolic computation from the fundamental forms to $10^{-16}$; run `python src/channel_model.py`.
+
+## 6. Wall thickness
+
+The notebook gives the blade a thickness $h = 0.05$ by offsetting along the unit normal, $X \pm \tfrac{h}{2}\,\hat n$, and exports that point cloud for Autodesk Inventor ([`data/spiral_3D_points.xlsx`](data/spiral_3D_points.xlsx)). Because $\hat n$ has a vertical component wherever $\beta \neq 0$, this offset pushes the edges off the two planes: the faces reach $z \in [-0.018,\ 0.318]$ instead of $[0,\ 0.3]$, most at the $45^\circ$ inlet.
+
+`channel_shell(..., offset="horizontal")` offsets each slice inside its own plane instead, along the in-plane normal of the slice. Both faces then stay exactly between $z=0$ and $z=H$, and the thickness is measured horizontally. The hero image above uses this option.
+
+## 7. The lean law as a design control
+
+The lean law is the free design function of the construction. [`src/channel_model.py`](src/channel_model.py) generalises the notebook's law to a linear law between an inlet lean and an outlet lean:
+
+```math
+\beta(\theta) = \beta_{\text{in}} + \bigl(\beta_{\text{out}} - \beta_{\text{in}}\bigr)\,\frac{\theta}{\theta_{\max}}, \qquad -90^\circ < \beta_{\text{in}},\ \beta_{\text{out}} < 90^\circ .
+```
+
+The $1/\cos\beta$ stretch is kept, so every member of the family fits between the two planes. Values outside $(-90^\circ, 90^\circ)$ raise an error, because a horizontal ruling can never reach the top plane.
+
+The animation fixes $\beta_{\text{in}} = 45^\circ$ and swings $\beta_{\text{out}}$ from $45^\circ$ to $-45^\circ$ and back. At $\beta_{\text{out}} = 45^\circ$ the lean is constant and the blade is developable ($K = 0$). As soon as the lean varies, the blade becomes saddle-shaped, most strongly at the inlet foot, where $|K| = \beta'^2/s^2$ and $s$ is smallest.
+
+<p align="center">
+  <img src="media/control_function_sweep.gif" alt="Lean law sweep and its effect on Gaussian curvature" width="760">
+</p>
+
+## 8. Development history and reproduction
+
+The construction was developed in Mathematica; the notebooks are kept in [`notebooks/`](notebooks/).
 
 | Step | Notebook | Date | Contribution |
 |---|---|---|---|
-| 1 | [`01_homotopy_example.nb`](notebooks/01_homotopy_example.nb) | 2025-11-19 | Establishes the basic tool used throughout: a homotopy `H(s,t) = (1-t) f0(s) + t f1(s)` between two 3D curves, animated with a parameter slider. This is the warm-up exercise that motivates thinking of a family of curves as a continuously deformable surface. |
-| 2 | [`02_mobius_animations.nb`](notebooks/02_mobius_animations.nb) | 2025-11-22 | Builds the classical Möbius strip, `(1 + w cos(θ/2)) (cos θ, sin θ, · ) , w sin(θ/2)`, and animates the rotating cross-sectional fiber to make the half-twist mechanism visible: at each angle θ, the fiber direction is a rotation of the radial vector `R(θ)` and the vertical axis `Z` by `θ/2`. |
-| 3 | [`03_log_spiral_v1.nb`](notebooks/03_log_spiral_v1.nb) | 2025-11-24 | Replaces the circle with a logarithmic spiral `r(θ) = a e^{bθ}(cos θ, sin θ)` and derives its Frenet frame (tangent `T(θ)`, normal `N(θ)`) symbolically. The rotating-fiber idea from Step 2 is reapplied using `N(θ)` in place of the circle's radial vector, producing the first spiral ribbon surface `X(θ, w)`. |
-| 4 | [`04_modified_mobius_curvature.nb`](notebooks/04_modified_mobius_curvature.nb) | 2025-12-01 | A parallel branch on the *circular* Möbius strip (not the spiral): adds a warping term `α v² sin(u)` to introduce non-zero Gaussian curvature, and confirms the curvature formula analytically. This established that the flat ribbon construction can be deliberately curved — a fact used qualitatively in later design discussion, though the curvature term itself was not carried into the spiral channel. |
-| 5 | [`05_log_spiral_v2_final.nb`](notebooks/05_log_spiral_v2_final.nb) | 2026-01-08 | The final Mathematica iteration and the basis of this repository. Revises Step 3's twist law to a slower, partial rotation `β(θ) = π/4 − θ/8` (rather than a full `θ/2` half-twist), rescales the offset so the channel width stays consistent as the twist angle varies, and — new in this step — gives the ribbon finite wall thickness by offsetting along its own surface normal, then samples and exports the resulting point cloud to CSV for CAD (Autodesk Inventor) import. [`data/spiral_3D_points.xlsx`](data/spiral_3D_points.xlsx) is that exported point cloud. |
-| 6 | [`src/channel_model.py`](src/channel_model.py) (this repository) | 2026-07 | Reimplements Step 5 in Python/SymPy and **generalizes the twist law** `β(θ)` from the fixed formula `π/4 − θ/8` into an explicit, tunable control function (see [§4](#4-generalized-control-function)), so the total amount of twist across the channel is itself a design parameter rather than baked into the spiral formula. |
+| 1 | [`01_homotopy_example.nb`](notebooks/01_homotopy_example.nb) | 2025-11-19 | Homotopy $H(s,t) = (1-t)f_0(s) + t f_1(s)$ between two space curves: a family of curves seen as a surface. |
+| 2 | [`02_mobius_animations.nb`](notebooks/02_mobius_animations.nb) | 2025-11-22 | Möbius strip as a circle carrying a rotating fibre $F = \cos(\theta/2)R + \sin(\theta/2)Z$, animated to show the rotation. |
+| 3 | [`03_log_spiral_v1.nb`](notebooks/03_log_spiral_v1.nb) | 2025-11-24 | Logarithmic spiral and its Frenet frame derived symbolically. First spiral ribbon, with the fibre $N + Z$ rotated about the vertical axis. |
+| 4 | [`04_modified_mobius_curvature.nb`](notebooks/04_modified_mobius_curvature.nb) | 2025-12-01 | Side study: a warping term $\alpha v^2 \sin u$ added to the Möbius strip to give it intrinsic curvature. |
+| 5 | [`05_log_spiral_v2_final.nb`](notebooks/05_log_spiral_v2_final.nb) | 2026-01-08 | Final construction: the fibre rotated inside the normal plane (about $T$), lean law $\pi/4 - \theta/8$, the $1/\cos\beta$ stretch so rulings span $0 \le z \le 0.3$, wall thickness $h = 0.05$, and point-cloud export for Inventor. |
 
-Steps 1–3, 5, and 6 form a single connected line of development (homotopy → rotating fiber → spiral
-generalization → finite-thickness channel with tunable sweep → tunable twist law). Step 4 is a side
-investigation into intrinsic curvature that informed the design conceptually but is architecturally
-independent of the final channel surface.
-
-## 3. Mathematical formulation
-
-All symbols below are implemented symbolically in [`src/channel_model.py`](src/channel_model.py),
-mirroring the derivation in Step 5.
-
-**Base curve.** A logarithmic spiral in the plane,
-
-```
-r(θ) = a e^{bθ} (cos θ, sin θ),        a = 0.2, b = 0.2
-```
-
-**Frenet frame.** The unit tangent and (principal) unit normal, obtained by differentiation and
-normalization:
-
-```
-T(θ) = r'(θ) / |r'(θ)|
-N(θ) = T'(θ) / |T'(θ)|
-```
-
-**Twist law (Step 5, as built in Mathematica).** A partial-twist angle, much slower than the
-classical Möbius strip's `θ/2`:
-
-```
-β(θ) = π/4 − θ/8
-```
-
-**Fiber direction.** A unit vector blending the in-plane normal (lifted to 3D with a zero
-z-component, written `N̂`) with the vertical axis `Ẑ = (0,0,1)`:
-
-```
-F(θ) = −sin(β(θ)) N̂(θ) + cos(β(θ)) Ẑ
-```
-
-**Channel mid-surface (Step 5).** The spiral, lifted to 3D (`r̂`, zero z-component), swept along
-`F(θ)` and offset by the cross-channel coordinate `w`:
-
-```
-X(θ, w) = r̂(θ) + (w / cos β(θ)) F(θ)
-```
-
-**Wall thickness.** The surface normal `n(θ, w) = (X_θ × X_w)/|X_θ × X_w|` gives two finite-thickness
-shells at offset `t = ±h/2`:
-
-```
-X_thick(θ, w, t) = X(θ, w) + t · n(θ, w),      h = 0.05
-```
-
-The channel cross-section spans `w ∈ [−0.1, 0.1]` in the visualizations in this repository (the
-original CAD export in Step 5 instead used the one-sided range `w ∈ [0, 0.3]`, which produces the
-same surface shape, just parametrized from one edge rather than the centerline).
-
-## 4. Generalized control function
-
-`β(θ) = π/4 − θ/8` is a fixed law: its slope (`−1/8`) and offset (`π/4`) are hard-coded together, so
-for the Step 5 domain `θ ∈ [0°, 342°]` it happens to produce a twist that drifts from 45° down to
-about 2° — there is no direct way to ask for a specific total twist, e.g. "sweep the twist from 0° to
-180° across the channel."
-
-This repository factors that out into an explicit **control function** with two independent, named
-parameters — a fixed sweep domain `θ_max` and a target total twist `β_max`:
-
-```
-β(θ; θ_max, β_max) = β_max · θ / θ_max
-```
-
-so that `β(0) = 0` and `β(θ_max) = β_max` by construction, for *any* `θ_max` and *any* `β_max` —
-in particular `β_max = π` (180°), a full half-twist end-to-end, the same total twist the classical
-Möbius strip applies over a full `2π` turn, but here applied over the shorter, open spiral sweep.
-
-**A note on a hidden singularity.** Step 5's offset term `w / cos β(θ)` was written to keep the
-channel's apparent width constant as `β` drifts near 45°. That factor diverges at `β = 90°`, which is
-now inside the requested `0° → 180°` range. `control_function_surface()` in
-[`src/channel_model.py`](src/channel_model.py) therefore drops the `1/cos β` correction and offsets by
-plain `w · F(θ)` instead — `F` is always a unit vector, so this stays well-defined at every `β`,
-including exactly 90°, at the cost of the channel's XY-projected width narrowing near `β = 90°`
-(geometrically honest behavior for a rotating offset, rather than an artifact of the correction term).
-This is a deliberate, documented deviation from Step 5's exact formula, used only for the control-
-function exploration in [§6.2](#62-control-function-sweep); the original `channel_surface()` /
-`channel_shell()` functions (Step 5's exact formula, singularity and all) are unchanged and still used
-for the hero image and the inlet/outlet animation.
-
-## 5. Inlet/outlet angle parametrization
-
-`θ` sweeps the channel from `θ_inlet` to `θ_outlet`. In Step 5's final render these were `0°` and
-`342°` (`1.9π` rad) respectively — just short of a full turn, leaving a visible gap between the
-channel's two open ends. Because the spiral and twist law are defined for all `θ`, these two bounds
-can be moved independently to widen, narrow, rotate, or reposition the channel opening without
-touching the underlying surface formula.
-
-## 6. Animations
-
-### 6.1 Inlet/outlet sensitivity
-
-[`scripts/make_animation.py`](scripts/make_animation.py) renders
-[`media/inlet_outlet_sweep.gif`](media/inlet_outlet_sweep.gif), which perturbs the inlet and outlet
-angles by small, independent, out-of-phase sinusoids around the baseline (±12° on the inlet, ±15° on
-the outlet), holding Step 5's twist law fixed, and recomputes the full surface at each frame. The
-surface is colored by θ (a proxy for position along the flow path). The on-screen title reports the
-exact inlet/outlet angle for the current frame.
-
-<p align="center">
-  <img src="media/inlet_outlet_sweep.gif" alt="Inlet/outlet angle sensitivity animation" width="480">
-</p>
-
-### 6.2 Control-function sweep
-
-[`scripts/make_control_function_animation.py`](scripts/make_control_function_animation.py) renders
-[`media/control_function_sweep.gif`](media/control_function_sweep.gif). This animation holds `θ`
-fixed at the baseline domain `[0°, 342°]` — it does **not** move the inlet/outlet — and instead
-sweeps the control function's target twist `β_max` smoothly from 0° up to 180° and back down. Two
-panels are shown side by side every frame: the 3D channel surface on the left, and a plot of the
-control function `β(θ)` itself (the straight line from `(0, 0)` to `(θ_max, β_max)`) on the right, so
-the line's slope and the surface's twist change in lockstep.
-
-<p align="center">
-  <img src="media/control_function_sweep.gif" alt="Control function sweep animation" width="640">
-</p>
-
-At `β_max = 0°` the channel is a flat, untwisted offset band. At `β_max = 180°` it carries a full
-Möbius-style half-twist from inlet to outlet.
-
-[`scripts/render_hero.py`](scripts/render_hero.py) renders the static, finite-thickness banner image
-at the top of this document, at the baseline inlet/outlet angles and Step 5's twist law.
-
-## 7. Repository structure
+The Python code in this repository adds the closed forms, the curvature and developability analysis, the general lean law, and the horizontal wall offset.
 
 ```
 .
-├── README.md
-├── LICENSE
-├── requirements.txt
-├── notebooks/            original Mathematica notebooks, in development order
-├── src/
-│   └── channel_model.py      SymPy/NumPy re-implementation + generalized control function
+├── src/channel_model.py                    closed-form geometry, curvature, symbolic self-check
 ├── scripts/
-│   ├── render_hero.py                     static banner render (finite thickness)
-│   ├── make_animation.py                  inlet/outlet angle-sensitivity animation
-│   └── make_control_function_animation.py control-function (twist law) sweep animation
-├── data/
-│   └── spiral_3D_points.xlsx original CAD-export point cloud from Step 5
+│   ├── render_hero.py                      media/hero_channel.png
+│   ├── render_geometry.py                  media/geometry.png
+│   ├── make_ruling_animation.py            media/ruling_sweep.gif
+│   ├── make_control_function_animation.py  media/control_function_sweep.gif
+│   └── plot_utils.py                       shared styling
+├── notebooks/                              original Mathematica notebooks
+├── data/spiral_3D_points.xlsx              CAD point cloud exported from notebook 5
 └── media/
-    ├── hero_channel.png
-    ├── inlet_outlet_sweep.gif
-    └── control_function_sweep.gif
 ```
-
-## 8. Reproducing the results
 
 ```bash
-python -m venv .venv && source .venv/bin/activate   # optional
 pip install -r requirements.txt
 
-python src/channel_model.py                       # sanity-check the geometry (prints grid ranges)
-python scripts/render_hero.py                      # -> media/hero_channel.png
-python scripts/make_animation.py                   # -> media/inlet_outlet_sweep.gif
-python scripts/make_control_function_animation.py  # -> media/control_function_sweep.gif
+python src/channel_model.py                        # closed forms vs symbolic derivation
+python scripts/render_hero.py
+python scripts/render_geometry.py
+python scripts/make_ruling_animation.py
+python scripts/make_control_function_animation.py
 ```
 
-To explore a different inlet/outlet angle by hand:
-
 ```python
-from src.channel_model import channel_surface
+import sys; sys.path.insert(0, "src")
+from channel_model import surface, gaussian_curvature, linear_lean
 
-x, y, z, theta, w = channel_surface(theta_min_deg=-10, theta_max_deg=330)
-```
-
-To explore a different total twist (control function) by hand:
-
-```python
-from src.channel_model import control_function_surface
-
-x, y, z, theta, w = control_function_surface(theta_max_deg=342, beta_max_deg=180)
+lean = linear_lean(theta_max_deg=342, beta_in_deg=45, beta_out_deg=10)
+X = surface(1.0, 0.15, lean)              # point at theta = 1 rad, height 0.15
+K = gaussian_curvature(1.0, 0.15, lean)
 ```
 
 ## 9. Limitations and future work
 
-This repository establishes the **geometric skeleton only**. No fluid-mechanical modeling — flow
-rate, head, velocity/pressure field, Reynolds number, cavitation margin, or any CFD analysis — has
-been performed on this surface. The wall-thickness offset and CAD export in Step 5 are the only steps
-taken toward a manufacturable part; the "pump" framing describes the intended end use of the
-geometry, not a validated pump design.
+This repository establishes the geometry only. No flow analysis (head, flow rate, velocity and pressure fields, cavitation) has been carried out, and "pump" describes the intended use rather than a validated design.
 
 Natural next steps:
 
-- Fluid-dynamic simulation (e.g. CFD) over the channel interior to characterize flow behavior.
-- A structured sweep over spiral parameters `(a, b)`, not just the twist law and inlet/outlet angle.
-- Reconciling `channel_surface()` (Step 5's exact `1/cos β` formula) and `control_function_surface()`
-  (the singularity-free generalization in §4) into a single surface function, e.g. by capping or
-  regularizing `1/cos β` instead of dropping it outright.
-- Solid-model export (STEP/STL) directly from `channel_model.py` rather than via the CSV point-cloud
-  round trip used in Step 5.
-- Reconciling the two `w` conventions (centered `[-0.1, 0.1]` vs. one-sided `[0, 0.3]`) into a single
-  parametrization.
+- Choose the lean law by optimisation, for example to meet given inlet and outlet angles while keeping $\int |K|\,dA$ small, which makes the blade easier to manufacture.
+- Make the spiral parameters $(a, b)$ and the plane spacing $H$ part of the design study.
+- Export a closed solid (STEP or STL) directly from the closed forms instead of the CSV point cloud.
+- Run CFD on the channel between the blade and the two planes.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+Public domain, under [the Unlicense](LICENSE). Anyone may copy, modify, use and distribute this work for any purpose, without asking permission.

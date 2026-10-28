@@ -2,52 +2,49 @@
 render_hero.py
 ===============
 
-Renders a single high-quality static image of the channel at its baseline
-inlet/outlet angles, with wall thickness, for use as the README banner.
+Banner image: the blade with wall thickness, standing between the two
+parallel planes z = 0 and z = H.
 
 Usage:
     python scripts/render_hero.py
 """
 import os
-import sys
 
+import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from channel_model import channel_shell, BASELINE_INLET_DEG, BASELINE_OUTLET_DEG
+from plot_utils import MEDIA, INK, draw_planes, setup_3d, trim_png
+from channel_model import (DEFAULT_PARAMS as P, BASELINE_INLET_DEG, BASELINE_OUTLET_DEG,
+                           channel_shell, frame)
 
-HERE = os.path.dirname(__file__)
-OUT = os.path.join(HERE, "..", "media", "hero_channel.png")
+OUT = os.path.join(MEDIA, "hero_channel.png")
+RADIUS = 0.78
 
 
 def main():
-    fig = plt.figure(figsize=(9, 9))
-    ax = fig.add_subplot(111, projection="3d")
-    ax.set_facecolor("white")
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
     fig.patch.set_facecolor("white")
 
-    n_theta, n_w = 220, 18
-    xt, yt, zt = channel_shell(BASELINE_INLET_DEG, BASELINE_OUTLET_DEG, +1.0,
-                                n_theta=n_theta, n_w=n_w)
-    xb, yb, zb = channel_shell(BASELINE_INLET_DEG, BASELINE_OUTLET_DEG, -1.0,
-                                n_theta=n_theta, n_w=n_w)
+    draw_planes(ax, RADIUS, P.height)
+    for sign, color in ((-1.0, "#256abf"), (+1.0, "#6da7ec")):
+        x, y, z = channel_shell(BASELINE_INLET_DEG, BASELINE_OUTLET_DEG, sign,
+                                n_theta=260, n_w=20, offset="horizontal")
+        ax.plot_surface(x, y, z, color=color, alpha=0.95, linewidth=0, antialiased=True, shade=True)
 
-    ax.plot_surface(xt, yt, zt, color="#e8823c", alpha=0.75, linewidth=0, antialiased=True)
-    ax.plot_surface(xb, yb, zb, color="#c23b32", alpha=0.75, linewidth=0, antialiased=True)
+    th = np.linspace(np.deg2rad(BASELINE_INLET_DEG), np.deg2rad(BASELINE_OUTLET_DEG), 300)
+    r = frame(th)[0]
+    ax.plot(r[0], r[1], r[2], color=INK, linewidth=1.2)
 
-    ax.set_box_aspect((1, 1, 0.35))
-    ax.set_axis_off()
-    ax.view_init(elev=34, azim=-58)
-    ax.set_title(
-        "Single-channel pump skeleton — log-spiral ribbon, finite wall thickness\n"
-        f"inlet = {BASELINE_INLET_DEG:.0f}°   outlet = {BASELINE_OUTLET_DEG:.0f}°",
-        fontsize=12,
-    )
-
-    fig.tight_layout()
-    fig.savefig(OUT, dpi=160, facecolor="white")
+    setup_3d(ax, RADIUS, P.height, elev=30, azim=-62, zoom=1.18)
+    ax.set_title("Log-spiral blade between two parallel planes\n"
+                 r"$X(\theta,w)=r(\theta)+\frac{w}{\cos\beta(\theta)}\,F(\theta)$,"
+                 r"   $0\leq w\leq H$", fontsize=12, color=INK)
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=0.88)
+    fig.savefig(OUT, dpi=150, facecolor="white")
+    trim_png(OUT)
     print("wrote", OUT)
 
 

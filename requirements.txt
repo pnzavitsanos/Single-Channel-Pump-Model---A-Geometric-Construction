@@ -1,5 +1,4 @@
 numpy>=1.24
-sympy>=1.12
+sympy>=1.12        # only for the symbolic self-check
 matplotlib>=3.7
 pillow>=10.0
-openpyxl>=3.1

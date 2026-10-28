@@ -2,33 +2,26 @@
 make_control_function_animation.py
 ====================================
 
-Renders ``media/control_function_sweep.gif``.
+Renders media/control_function_sweep.gif: what the lean law does to the
+curvature of the blade.
 
-Unlike ``make_animation.py`` (which fixes the twist law and animates the
-inlet/outlet *theta* domain), this animation fixes the theta domain at the
-baseline sweep ``[0, 342 deg]`` (1.9*pi) and instead animates the **control
-function itself**:
+The lean runs linearly from beta_in = 45 deg at the inlet to beta_out at the
+outlet, with the 1/cos(beta) stretch kept, so every frame still fits exactly
+between the planes z = 0 and z = H. beta_out swings 45 -> -45 -> 45 deg:
 
-    beta(theta) = beta_max * theta / theta_max
+  * beta_out = 45 deg: constant lean, beta' = 0, so K = 0 everywhere. The
+    blade is developable and could be rolled from a flat sheet.
+  * any other beta_out: beta' != 0 and K < 0 (saddle-shaped), with
+    K = -beta'^2 / s^2 along the bottom edge.
 
-by sweeping ``beta_max`` from 0 deg up to 180 deg and back down, smoothly and
-periodically. At beta_max = 0 the channel is untwisted (a flat offset band);
-at beta_max = 180 deg it carries a full Mobius-style half-twist from one end
-to the other, applied over the partial spiral sweep instead of a full turn.
-
-Two panels are drawn side by side every frame:
-
-  * left:  the 3D channel surface for the current beta_max
-  * right: the control function beta(theta) itself, i.e. the straight line
-           from (0, 0) to (theta_max, beta_max) in a (theta, beta) plot with
-           fixed axes -- so you watch the *law* rotate into place, which is
-           the thing this animation is meant to show changing.
+Left: the blade coloured by |K| (fixed colour scale for all frames).
+Right: the lean law beta(theta), with the forbidden band |beta| >= 90 deg in
+which a ruling could never reach the top plane.
 
 Usage:
     python scripts/make_control_function_animation.py
 """
 import os
-import sys
 import shutil
 import tempfile
 
@@ -36,77 +29,79 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from PIL import Image
+from matplotlib.colors import LightSource, PowerNorm
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from channel_model import control_function_surface, control_function_values, BASELINE_OUTLET_DEG
+from plot_utils import MEDIA, INK, MUTED, BLUES, CURVATURE_CMAP, draw_planes, setup_3d, save_gif
+from channel_model import (DEFAULT_PARAMS as P, BASELINE_OUTLET_DEG,
+                           control_function_surface, control_function_values)
 
-HERE = os.path.dirname(__file__)
-OUT = os.path.join(HERE, "..", "media", "control_function_sweep.gif")
+OUT = os.path.join(MEDIA, "control_function_sweep.gif")
+N_FRAMES = 36
+FPS = 8
+N_THETA, N_W = 90, 14
+RADIUS = 0.8
+THETA_MAX_DEG = BASELINE_OUTLET_DEG
+BETA_IN_DEG = 45.0
+K_NORM = PowerNorm(gamma=0.5, vmin=0.0, vmax=1.7)
+LIGHT = LightSource(azdeg=315, altdeg=35)
 
-N_FRAMES = 30
-FPS = 10
-N_THETA, N_W = 60, 9
 
-THETA_MAX_DEG = BASELINE_OUTLET_DEG  # 342 deg = 1.9*pi, held fixed throughout
-
-
-def beta_max_schedule(frame_t: float) -> float:
-    """frame_t in [0, 1); smooth 0 -> 180 -> 0 deg ping-pong via a raised cosine."""
-    return 90.0 * (1.0 - np.cos(2 * np.pi * frame_t))
+def beta_out_schedule(t):
+    """t in [0, 1): 45 -> -45 -> 45 deg, smooth."""
+    return BETA_IN_DEG - 45.0 * (1.0 - np.cos(2 * np.pi * t))
 
 
 def main():
-    tmpdir = tempfile.mkdtemp(prefix="pump_cf_anim_")
-    fig = plt.figure(figsize=(11, 5.5))
-    ax3d = fig.add_subplot(1, 2, 1, projection="3d")
-    ax2d = fig.add_subplot(1, 2, 2)
+    tmpdir = tempfile.mkdtemp(prefix="pump_cf_")
+    fig = plt.figure(figsize=(11, 5))
     fig.patch.set_facecolor("white")
-    fig.subplots_adjust(left=0.04, right=0.98, top=0.88, bottom=0.12, wspace=0.25)
 
-    frame_paths = []
+    paths = []
     for i in range(N_FRAMES):
-        beta_max = beta_max_schedule(i / N_FRAMES)
+        beta_out = beta_out_schedule(i / N_FRAMES)
+        fig.clf()
 
-        # --- left: 3D surface ---
-        ax3d.clear()
-        x, y, z, th, wv = control_function_surface(THETA_MAX_DEG, beta_max,
-                                                     n_theta=N_THETA, n_w=N_W)
-        theta_norm = (th - th.min()) / (th.max() - th.min() + 1e-9)
-        facecolors = plt.cm.plasma(np.tile(theta_norm[:, None], (1, N_W)))
-        ax3d.plot_surface(x, y, z, facecolors=facecolors, linewidth=0,
-                           antialiased=False, shade=False)
-        ax3d.set_box_aspect((1, 1, 0.4))
-        ax3d.set_axis_off()
-        ax3d.view_init(elev=32, azim=-58)
-        ax3d.set_xlim(-0.6, 0.7)
-        ax3d.set_ylim(-0.7, 0.5)
-        ax3d.set_zlim(-0.15, 0.15)
-        ax3d.set_title(f"channel surface\n$\\beta_{{max}}$ = {beta_max:5.1f}°", fontsize=11)
+        ax3d = fig.add_subplot(1, 2, 1, projection="3d", computed_zorder=False)
+        draw_planes(ax3d, RADIUS, P.height)
+        x, y, z, K, th, wv = control_function_surface(THETA_MAX_DEG, BETA_IN_DEG, beta_out,
+                                                      n_theta=N_THETA, n_w=N_W)
+        Kc = 0.25 * (K[:-1, :-1] + K[1:, :-1] + K[:-1, 1:] + K[1:, 1:])
+        ax3d.plot_surface(x, y, z, facecolors=CURVATURE_CMAP(0.15 + 0.85 * K_NORM(np.abs(Kc))),
+                          linewidth=0, antialiased=False, shade=True, lightsource=LIGHT)
+        for edge in (np.s_[:, 0], np.s_[:, -1], np.s_[0, :], np.s_[-1, :]):
+            ax3d.plot(x[edge], y[edge], z[edge], color=INK, linewidth=0.9)
+        setup_3d(ax3d, RADIUS, P.height, elev=30, azim=-62, zoom=1.25)
+        kmax = np.abs(K).max()
+        state = "constant lean: developable, $K=0$" if kmax < 1e-12 else f"max $|K|$ = {kmax:.2f}"
+        ax3d.set_title(f"blade coloured by $|K|$\n{state}", fontsize=11, color=INK)
 
-        # --- right: the control function itself ---
-        ax2d.clear()
-        th_deg, beta_deg = control_function_values(THETA_MAX_DEG, beta_max, n_theta=200)
-        ax2d.plot(th_deg, beta_deg, color="#c23b32", linewidth=2.5)
-        ax2d.fill_between(th_deg, 0, beta_deg, color="#e8823c", alpha=0.15)
-        ax2d.axhline(90, color="gray", linestyle=":", linewidth=1)
-        ax2d.set_xlim(0, THETA_MAX_DEG)
-        ax2d.set_ylim(0, 180)
-        ax2d.set_xlabel(r"$\theta$ (deg)  —  fixed inlet$\to$outlet sweep")
-        ax2d.set_ylabel(r"control function $\beta(\theta)$ (deg)")
-        ax2d.set_title(r"$\beta(\theta) = \beta_{max}\cdot\theta/\theta_{max}$", fontsize=11)
-        ax2d.spines["top"].set_visible(False)
-        ax2d.spines["right"].set_visible(False)
+        ax = fig.add_subplot(1, 2, 2)
+        th_deg, beta_deg = control_function_values(THETA_MAX_DEG, BETA_IN_DEG, beta_out, n_theta=200)
+        for lo, hi in ((90, 120), (-120, -90)):
+            ax.axhspan(lo, hi, color="#d0d7de", alpha=0.6, linewidth=0)
+        ax.text(THETA_MAX_DEG / 2, 100, "ruling cannot reach $z=H$", ha="center", va="center",
+                fontsize=9, color=MUTED)
+        ax.axhline(0, color="#d0d7de", linewidth=1)
+        ax.plot(th_deg, beta_deg, color=BLUES[4], linewidth=2.5)
+        slope = (beta_out - BETA_IN_DEG) / THETA_MAX_DEG
+        ax.text(0.02, 0.06, rf"$\beta'$ = {slope:+.3f} (deg/deg)", transform=ax.transAxes,
+                fontsize=10, color=INK)
+        ax.set_xlim(0, THETA_MAX_DEG)
+        ax.set_ylim(-120, 120)
+        ax.set_xlabel(r"$\theta$ (degrees along the spiral)", color=INK)
+        ax.set_ylabel(r"lean $\beta(\theta)$ (degrees)", color=INK)
+        ax.set_title(rf"$\beta_{{in}}$ = {BETA_IN_DEG:.0f}°    $\beta_{{out}}$ = {beta_out:+.1f}°",
+                     fontsize=11, color=INK)
+        ax.tick_params(colors=MUTED, labelsize=9)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
 
-        p = os.path.join(tmpdir, f"frame_{i:03d}.png")
-        fig.savefig(p, dpi=100, facecolor="white")
-        frame_paths.append(p)
+        fig.subplots_adjust(left=0.0, right=0.97, top=0.86, bottom=0.12, wspace=0.12)
+        p = os.path.join(tmpdir, f"f{i:03d}.png")
+        fig.savefig(p, dpi=85, facecolor="white")
+        paths.append(p)
 
-    images = [Image.open(p).convert("P", palette=Image.ADAPTIVE, colors=200) for p in frame_paths]
-    images[0].save(
-        OUT, save_all=True, append_images=images[1:],
-        duration=int(1000 / FPS), loop=0, optimize=False,
-    )
+    save_gif(paths, OUT, FPS, hold_first=8)  # pause on the developable case
     shutil.rmtree(tmpdir, ignore_errors=True)
     print("wrote", OUT)
 

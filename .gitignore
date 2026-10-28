@@ -4,3 +4,4 @@ __pycache__/
 .DS_Store
 *.log
 testfile_delete_me.txt
+.venv/
